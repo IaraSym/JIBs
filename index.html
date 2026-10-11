@@ -176,11 +176,18 @@ try { API_URL = localStorage.getItem('jib_url') || ''; } catch(e) {}
 async function call(fn, ...args){
   if (!API_URL) { showSetup(); throw new Error('SEM_ENDERECO'); }
   const fnArgs = fn === 'needsPin' ? args : [PIN, ...args];
-  let r;
+  let r, res, txt = '';
+  // leituras por GET (mais simples), gravações por POST (podem ter textos longos)
+  const leitura = fn === 'getAll' || fn === 'needsPin' || fn === 'limparCacheCalendario';
   try {
-    const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({fn, args: fnArgs}) });
-    r = await res.json();
-  } catch(e) { throw new Error('Sem ligação à internet ou endereço errado'); }
+    if (leitura) {
+      res = await fetch(API_URL + (API_URL.includes('?') ? '&' : '?') + 'fn=' + encodeURIComponent(fn) + '&args=' + encodeURIComponent(JSON.stringify(fnArgs)), { redirect:'follow' });
+    } else {
+      res = await fetch(API_URL, { method:'POST', redirect:'follow', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({fn, args: fnArgs}) });
+    }
+  } catch(e) { throw new Error('Não consegui contactar o Apps Script (' + (e.message || e) + ')'); }
+  try { txt = await res.text(); r = JSON.parse(txt); }
+  catch(e) { throw new Error('O Apps Script respondeu sem dados (estado ' + res.status + '). ' + (txt.indexOf('<') >= 0 ? 'Recebi uma página em vez de dados: confirma a nova versão e "Qualquer pessoa".' : txt.slice(0, 120))); }
   if (!r || !r.ok) {
     const msg = r && r.error || 'Erro';
     if (msg.indexOf('PIN_INVALIDO') >= 0) showSetup('PIN errado');
